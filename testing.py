@@ -97,7 +97,7 @@ def bounded_mutation_with_depth(individual, mu=0, sigma=0.15, indpb=0.15):
     num_layers = int(individual[0])
     
     # Mutate number of layers (lower probability)
-    if random.random() < 0.03:  # Reduced probability
+    if random.random() < 0.05:  # Reduced probability
         new_num_layers = max(2, min(4, num_layers + random.choice([-1, 1])))
         
         if new_num_layers > num_layers:
