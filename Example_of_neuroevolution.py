@@ -87,7 +87,7 @@ def bounded_mutation_with_depth(individual, mu=0, sigma=0.2, indpb=0.2):
     num_layers = int(individual[0])
     
     # Mutate number of layers (with lower probability)
-    if random.random() < 0.05:  # 10% chance to change depth
+    if random.random() < 0.05:  # 5% chance to change depth
         new_num_layers = max(2, min(5, num_layers + random.choice([-1, 1])))
         
         if new_num_layers > num_layers:
@@ -407,7 +407,7 @@ def run_evolution():
     logbook.record(gen=0, nevals=len(pop), **record)
     print(logbook.stream)
     
-    for gen in range(1, 11):  
+    for gen in range(1, 21):  
         offspring = toolbox.select(pop, len(pop))
         offspring = list(map(toolbox.clone, offspring))
         
