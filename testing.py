@@ -8,7 +8,7 @@ import numpy as np
 import random
 from deap import base, creator, tools, algorithms
 import matplotlib.pyplot as plt
-import seaborn as sns
+import seaborn as sns   
 from matplotlib.patches import Rectangle
 import math
 
