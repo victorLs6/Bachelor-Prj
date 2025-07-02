@@ -32,21 +32,31 @@ def create_snn(layer_sizes, beta, dropout_rate=0.1):
             self.layers = nn.ModuleList()
             self.lif_layers = nn.ModuleList()
             self.dropout_layers = nn.ModuleList()
-            
-            # Input layer
+
+            # Layer params
             input_size = 28 * 28
+            output_size = 28 * 28
+            num_of_classes = 10
+
+            # Input layer
+            self.layers.append(nn.Linear(input_size, output_size)) #
+            self.lif_layers.append(snn.Leaky(beta=beta))
+
+            # Evolvable hidden layers
             for i, hidden_size in enumerate(layer_sizes):
-                self.layers.append(nn.Linear(input_size, hidden_size))
+                self.layers.append(nn.Linear(output_size, hidden_size))
                 self.lif_layers.append(snn.Leaky(beta=beta))
+
                 # Add dropout for regularization (except last layer)
-                if i < len(layer_sizes) - 1:
-                    self.dropout_layers.append(nn.Dropout(dropout_rate))
-                else:
-                    self.dropout_layers.append(nn.Identity())
-                input_size = hidden_size
+                # if i < len(layer_sizes) - 1:
+                #     self.dropout_layers.append(nn.Dropout(dropout_rate))
+                # else:
+                #     self.dropout_layers.append(nn.Identity())
+                
+                output_size = hidden_size
             
             # Output layer
-            self.layers.append(nn.Linear(input_size, 10))
+            self.layers.append(nn.Linear(output_size, num_of_classes))
             self.lif_layers.append(snn.Leaky(beta=beta))
 
         def forward(self, x, num_steps=15):  # Increased time steps
@@ -58,12 +68,12 @@ def create_snn(layer_sizes, beta, dropout_rate=0.1):
                 current_input = x.view(x.size(0), -1)
                 
                 # Forward through all layers
-                for i, (layer, lif, dropout) in enumerate(zip(self.layers, self.lif_layers, self.dropout_layers + [nn.Identity()])):
-                    current = layer(current_input)
-                    spike, mem_states[i] = lif(current, mem_states[i])
-                    if i < len(self.layers) - 1:  # Apply dropout except on output
-                        spike = dropout(spike)
-                    current_input = spike
+                # for i, (layer, lif, dropout) in enumerate(zip(self.layers, self.lif_layers, self.dropout_layers + [nn.Identity()])):
+                #     current = layer(current_input)
+                #     spike, mem_states[i] = lif(current, mem_states[i])
+                #     if i < len(self.layers) - 1:  # Apply dropout except on output
+                #         spike = dropout(spike)
+                #     current_input = spike
                 
                 spk_out += current_input
             
