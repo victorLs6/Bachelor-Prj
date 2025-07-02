@@ -98,7 +98,7 @@ def bounded_mutation_with_depth(individual, mu=0, sigma=0.15, indpb=0.15):
     
     # Mutate number of layers (lower probability)
     if random.random() < 0.08:  # Reduced probability
-        new_num_layers = max(2, min(4, num_layers + random.choice([-1, 1])))
+        new_num_layers = max(2, min(4, num_layers + random.choice([1,3])))
         
         if new_num_layers > num_layers:
             # Add a new layer (smaller than previous)
@@ -261,7 +261,7 @@ def evaluate_model_with_depth(individual):
         complexity_penalty = num_layers * 0.001 + sum(layer_sizes) * 0.00001
         overfitting_penalty = max(0, avg_train_loss - avg_eval_loss) * 0.1
         
-        final_fitness = accuracy - complexity_penalty - overfitting_penalty
+        final_fitness = accuracy
         
         return (final_fitness,)
     
@@ -292,24 +292,6 @@ def print_best_individual(generation, best_individual, fitness):
     print(f"Dropout Rate: {dropout:.4f}")
     print(f"Total Parameters: ~{sum([784] + layer_sizes + [10]) * sum(layer_sizes + [10]):,}")
     print(f"{'='*60}")
-
-# Create DEAP classes and toolbox
-creator.create("FitnessMax", base.Fitness, weights=(1.0,))
-creator.create("Individual", list, fitness=creator.FitnessMax)
-
-toolbox = base.Toolbox()
-
-def create_individual():
-    """Create an individual and wrap it in creator.Individual"""
-    ind_data = create_individual_with_depth()
-    return creator.Individual(ind_data)
-
-toolbox.register("individual", create_individual)
-toolbox.register("population", tools.initRepeat, list, toolbox.individual)
-toolbox.register("evaluate", evaluate_model_with_depth)
-toolbox.register("mate", crossover_with_depth)
-toolbox.register("mutate", bounded_mutation_with_depth, mu=0, sigma=0.1, indpb=0.15)
-toolbox.register("select", tools.selTournament, tournsize=3)
 
 def plot_evolution_progress(logbook, generation_best):
     """Plot evolution progress with multiple metrics"""
@@ -584,6 +566,43 @@ def plot_beta_evolution(generation_best):
     plt.savefig('beta_evolution.png', dpi=300, bbox_inches='tight')
     plt.show()
 
+def plot_layers_evolution(logbook, generation_best):
+    """Plot the evolution of layer counts in the population"""
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+    
+    # Extract data
+    generations = [record['gen'] for record in logbook]
+    avg_layers = [record['avg_layers'] for record in logbook]
+    
+    # Best individual layers
+    best_layers = [ind[1][0] for ind in generation_best]
+    
+    # Plot 1: Average layers vs best individual layers
+    ax1.plot(generations, avg_layers, 'b-', linewidth=2, marker='o', label='Population Average')
+    ax1.plot(generations, best_layers, 'r-', linewidth=2, marker='s', label='Best Individual')
+    ax1.set_xlabel('Generation')
+    ax1.set_ylabel('Number of Layers')
+    ax1.set_title('Layer Count Evolution')
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+    
+    # Plot 2: Layer distribution in final population
+    final_pop = logbook[-1]['population']
+    final_layers = [ind[0] for ind in final_pop]
+    
+    unique_layers = sorted(list(set(final_layers)))
+    counts = [final_layers.count(l) for l in unique_layers]
+    
+    ax2.bar(unique_layers, counts, color='purple', alpha=0.7)
+    ax2.set_xlabel('Number of Layers')
+    ax2.set_ylabel('Count')
+    ax2.set_title('Final Population Layer Distribution')
+    ax2.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig('layers_evolution.png', dpi=300, bbox_inches='tight')
+    plt.show()
+
 def create_comprehensive_summary_plot(logbook, generation_best):
     """Create a comprehensive summary plot with key metrics"""
     fig = plt.figure(figsize=(20, 16))
@@ -746,17 +765,37 @@ Architecture Range: {min(layers_data)}-{max(layers_data)} layers          Parame
     plt.savefig('comprehensive_evolution_summary.png', dpi=300, bbox_inches='tight')
     plt.show()
 
+creator.create("FitnessMax", base.Fitness, weights=(1.0,))
+creator.create("Individual", list, fitness=creator.FitnessMax)
+
+toolbox = base.Toolbox()
+
+def create_individual():
+    """Create an individual and wrap it in creator.Individual"""
+    ind_data = create_individual_with_depth()
+    return creator.Individual(ind_data)
+
+toolbox.register("individual", create_individual)
+toolbox.register("population", tools.initRepeat, list, toolbox.individual)
+toolbox.register("evaluate", evaluate_model_with_depth)
+toolbox.register("mate", crossover_with_depth)
+toolbox.register("mutate", bounded_mutation_with_depth, mu=0, sigma=0.1, indpb=0.15)
+toolbox.register("select", tools.selTournament, tournsize=3)
+
 def run_evolution():
-    """Enhanced evolution with detailed best individual tracking and plotting"""
-    pop_size = 20
+    pop_size = 50
     pop = toolbox.population(n=pop_size)
-    hof = tools.HallOfFame(3)
+    hof = tools.HallOfFame(pop_size/10)
     
     stats = tools.Statistics(lambda ind: ind.fitness.values)
     stats.register("avg", np.mean)
     stats.register("max", np.max)
     stats.register("min", np.min)
     stats.register("std", np.std)
+    
+    # Add a new statistic for average layers
+    stats_layers = tools.Statistics(lambda ind: ind[0])  # ind[0] is the number of layers
+    stats_layers.register("avg", np.mean)
     
     logbook = tools.Logbook()
     logbook.header = ['gen', 'nevals'] + stats.fields
@@ -765,6 +804,8 @@ def run_evolution():
     generation_best = []
     # Store populations for each generation
     populations = []
+    # Store average layers per generation
+    avg_layers_per_gen = []
 
     print("Starting Evolution...")
     print("="*80)
@@ -777,6 +818,10 @@ def run_evolution():
     hof.update(pop)
     populations.append(pop)  # Store initial population
     
+    # Calculate and store average layers for generation 0
+    avg_layers = stats_layers.compile(pop)['avg']
+    avg_layers_per_gen.append(avg_layers)
+    
     # Find and display best individual of generation 0
     best_ind = tools.selBest(pop, 1)[0]
     generation_best.append((0, best_ind.copy(), best_ind.fitness.values[0]))
@@ -784,7 +829,8 @@ def run_evolution():
     
     record = stats.compile(pop)
     logbook.record(gen=0, nevals=len(pop), **record)
-    print(f"\nGen 0 Stats: {logbook.stream}")
+    print(f"\nGen 0 Stats:\n {logbook.stream}")
+    print(f"Average layers in population: {avg_layers:.2f}")
     
     # Evolution loop
     for gen in range(1, 31):
@@ -819,6 +865,10 @@ def run_evolution():
         hof.update(pop)
         populations.append(pop.copy())  # Store current population
         
+        # Calculate and store average layers for this generation
+        avg_layers = stats_layers.compile(pop)['avg']
+        avg_layers_per_gen.append(avg_layers)
+        
         # Find and display best individual of current generation
         best_ind = tools.selBest(pop, 1)[0]
         generation_best.append((gen, best_ind.copy(), best_ind.fitness.values[0]))
@@ -826,7 +876,8 @@ def run_evolution():
         
         record = stats.compile(pop)
         logbook.record(gen=gen, nevals=len(invalid_ind), **record)
-        print(f"Gen {gen} Stats: {logbook.stream}")
+        print(f"Gen {gen} \nStats: {logbook.stream}")
+        print(f"Average layers in population: {avg_layers:.2f}")
         
         # Early stopping if no improvement
         if gen > 10 and logbook[-1]['max'] == logbook[-5]['max']:
@@ -836,6 +887,10 @@ def run_evolution():
     # Add population information to logbook
     for i, entry in enumerate(logbook):
         entry['population'] = populations[i]
+        entry['avg_layers'] = avg_layers_per_gen[i]  # Add average layers to logbook
+    
+    # Plot the average layers evolution
+    plot_layers_evolution(logbook, generation_best)
     
     # Final summary
     print("\n" + "="*80)
