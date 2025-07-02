@@ -5,6 +5,7 @@ uv.lock
 mypy.ini
 ruff.toml
 pyproject.toml
+.typings
 ### PYTHON ######################################################################
 # Byte-compiled / optimized / DLL files
 __pycache__/
