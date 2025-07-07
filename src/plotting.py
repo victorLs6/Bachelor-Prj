@@ -467,7 +467,11 @@ def plot_beta_evolution(generation_best) -> None:
 
     # Plot 4: All Parameters Over Time
     # Normalize parameters to [0, 1] for comparison
-    norm_betas = [(b - min(betas)) / (max(betas) - min(betas)) for b in betas]
+    epsilon = 1e-10  # Tiny value to prevent division by zero
+    norm_betas = [
+    (b - min(betas)) / (max(betas) - min(betas) + epsilon) 
+    for b in betas
+    ]
     norm_lrs = [
         (lr - min(learning_rates)) / (max(learning_rates) - min(learning_rates))
         for lr in learning_rates

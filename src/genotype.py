@@ -16,8 +16,8 @@ Todo
 ----
     [ ]
 
-"""
 
+    """
 # Standard library
 from pathlib import Path
 
@@ -26,7 +26,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 import snntorch as snn
-import torch
+import torch    
 import torchvision
 from rich.console import Console
 from rich.traceback import install
@@ -107,6 +107,16 @@ def create_snn(layer_sizes, beta, dropout_rate=0.1):
             self.layers.append(nn.Linear(input_size, num_of_classes))
             self.lif_layers.append(snn.Leaky(beta=beta))
 
+            # Improved weight initialization for SNNs
+            self.apply(self._init_weights)
+
+        def _init_weights(self, m):
+            if isinstance(m, nn.Linear):
+                # Xavier initialization with slight bias for SNNs
+                torch.nn.init.xavier_uniform_(m.weight, gain=0.8)
+                if m.bias is not None:
+                    m.bias.data.fill_(0.01)
+
         def forward(self, x, num_steps=15):  # Increased time steps
             # Initialize membrane potentials for all layers
             mem_states = [lif.init_leaky() for lif in self.lif_layers]
@@ -139,8 +149,10 @@ def create_snn(layer_sizes, beta, dropout_rate=0.1):
 
 
 def create_individual_with_depth():
-    """Create individual with improved parameter ranges."""
-    num_hidden_layers = RNG.integers(1, 10)  # Reduced max depth for stability
+    """Create individual with improved parameter ranges and depth diversity."""
+    # Bias toward mid-range depths (3-6 layers) but allow full range
+    depth_weights = [0.1, 0.1, 0.15, 0.2, 0.2, 0.15, 0.05, 0.03, 0.02]  # Favor 4-6 layers
+    num_hidden_layers = RNG.choice(range(1, 10), p=depth_weights)
 
     # Create layer sizes with tapering (wider to narrower)
     layer_sizes = []
@@ -149,86 +161,90 @@ def create_individual_with_depth():
     for i in range(num_hidden_layers):
         # Gradually reduce size for deeper layers
         reduction_factor = 0.9**i
-        size = max(32, (base_size + RNG.uniform(-20, 20) * reduction_factor))
+        size = max(32, int(base_size * reduction_factor + RNG.uniform(-20, 20)))
         layer_sizes.append(size)
 
-    beta = RNG.uniform(0.7, 0.95)  # Narrower beta range
-    lr = RNG.uniform(0.001, 0.005)  # Narrower LR range
-    dropout = RNG.uniform(0.0, 0.2)  # Add dropout parameter
+    # Depth-adaptive parameters
+    beta = RNG.uniform(0.5, 0.85)  # Wider beta range
+    
+    # Adjust learning rate based on depth - deeper networks need lower LR
+    base_lr = RNG.uniform(0.001, 0.008)
+    lr = base_lr / (1 + num_hidden_layers * 0.05)  # Lower LR for deeper networks
+    
+    dropout = RNG.uniform(0.0, 0.25)  # Slightly higher dropout range
 
-    # [num_hidden_layers=3, *layer_sizes, beta, lr, dropout]
-    # [0, [1, 2, 3], 4, 5, 6]
+    # [num_hidden_layers, *layer_sizes, beta, lr, dropout]
     return [num_hidden_layers, *layer_sizes, beta, lr, dropout]
 
 
-def bounded_mutation_with_depth(individual, mu=0, sigma=0.15, indpb=0.15):
-    """Improved mutation with smaller perturbations."""
+def bounded_mutation_with_depth(individual, mu=0, sigma=0.15, indpb=0.2):
+    """Improved mutation with better depth exploration."""
     num_layers = int(individual[0])
 
-    # Mutate number of layers (lower probability)
-    if RNG.random() < 0.15:  # Reduced probability
-        new_num_layers = max(2, min(4, num_layers + RNG.choice([0, 1])))
+    # Mutate number of layers (increased probability)
+    if RNG.random() < 0.3:  # Increased from 0.15
+        # Allow both adding and removing layers
+        change = RNG.choice([-1, 0, 1])  # Can remove, stay same, or add
+        new_num_layers = max(1, min(8, num_layers + change))
 
         if new_num_layers > num_layers:
             # Add a new layer (smaller than previous)
             prev_size = individual[num_layers] if num_layers > 0 else 128
-            new_layer_size = max(32, prev_size * 0.7 + RNG.uniform(-10, 10))
+            new_layer_size = max(32, int(prev_size * 0.7 + RNG.uniform(-10, 10)))
             individual.insert(num_layers + 1, new_layer_size)
         elif new_num_layers < num_layers:
-            individual.pop(num_layers)
+            # Remove a layer (remove from middle preferentially)
+            if num_layers > 1:
+                remove_idx = RNG.choice(range(1, min(num_layers + 1, len(individual) - 3)))
+                individual.pop(remove_idx)
 
         individual[0] = new_num_layers
         num_layers = new_num_layers
 
     # Mutate layer sizes with smaller perturbations
     for i in range(1, num_layers + 1):
-        if RNG.random() < indpb:
+        if i < len(individual) - 3 and RNG.random() < indpb:
             individual[i] += RNG.normal(mu, sigma * 30)  # Smaller mutations
-            individual[i] = max(32, min(256, individual[i]))
+            individual[i] = max(32, min(512, individual[i]))  # Wider range
 
-    # Mutate beta
-    if RNG.random() < indpb:
-        individual[num_layers + 1] += RNG.normal(mu, sigma * 0.05)
-        individual[num_layers + 1] = max(
-            0.7,
-            min(0.95, individual[num_layers + 1]),
-        )
+    # Mutate beta (wider range)
+    if len(individual) > num_layers + 1 and RNG.random() < indpb:
+        individual[num_layers + 1] += RNG.normal(mu, sigma * 0.08)
+        individual[num_layers + 1] = max(0.5, min(0.9, individual[num_layers + 1]))
 
     # Mutate learning rate
-    if RNG.random() < indpb:
-        individual[num_layers + 2] += RNG.normal(mu, sigma * 0.001)
-        individual[num_layers + 2] = max(
-            0.001,
-            min(0.005, individual[num_layers + 2]),
-        )
+    if len(individual) > num_layers + 2 and RNG.random() < indpb:
+        individual[num_layers + 2] += RNG.normal(mu, sigma * 0.002)
+        individual[num_layers + 2] = max(0.0005, min(0.01, individual[num_layers + 2]))
 
     # Mutate dropout
-    if RNG.random() < indpb:
+    if len(individual) > num_layers + 3 and RNG.random() < indpb:
         individual[num_layers + 3] += RNG.normal(mu, sigma * 0.05)
-        individual[num_layers + 3] = max(
-            0.0,
-            min(0.2, individual[num_layers + 3]),
-        )
+        individual[num_layers + 3] = max(0.0, min(0.3, individual[num_layers + 3]))
 
     return (individual,)
 
 
 def crossover_with_depth(ind1, ind2):
-    """Improved crossover for variable-length individuals."""
+    """Improved crossover for variable-length individuals with diversity preservation."""
     num_layers1 = int(ind1[0])
     num_layers2 = int(ind2[0])
 
-    # Choose depth more intelligently (favor successful depths)
-    if hasattr(ind1, "fitness") and hasattr(ind2, "fitness"):
-        if ind1.fitness.valid and ind2.fitness.valid:
-            if ind1.fitness.values[0] > ind2.fitness.values[0]:
-                chosen_depth = num_layers1
+    # Sometimes choose depth randomly to maintain diversity
+    if RNG.random() < 0.3:  # 30% chance for random depth choice
+        chosen_depth = RNG.choice([num_layers1, num_layers2])
+    else:
+        # Choose depth more intelligently (favor successful depths)
+        if hasattr(ind1, "fitness") and hasattr(ind2, "fitness"):
+            if ind1.fitness.valid and ind2.fitness.valid:
+                if ind1.fitness.values[0] > ind2.fitness.values[0]:
+                    chosen_depth = num_layers1
+                else:
+                    chosen_depth = num_layers2
             else:
-                chosen_depth = num_layers2
+                chosen_depth = RNG.choice([num_layers1, num_layers2])
         else:
             chosen_depth = RNG.choice([num_layers1, num_layers2])
-    else:
-        chosen_depth = RNG.choice([num_layers1, num_layers2])
 
     # Create new individuals
     new_ind1 = [chosen_depth]
@@ -243,16 +259,16 @@ def crossover_with_depth(ind1, ind2):
             size2 = (1 - alpha) * ind1[1 + i] + alpha * ind2[1 + i]
         elif i < num_layers1:
             size1 = ind1[1 + i] + RNG.uniform(-10, 10)
-            size2 = RNG.uniform(32, 128)
+            size2 = RNG.uniform(32, 256)
         elif i < num_layers2:
-            size1 = RNG.uniform(32, 128)
+            size1 = RNG.uniform(32, 256)
             size2 = ind2[1 + i] + RNG.uniform(-10, 10)
         else:
-            size1 = RNG.uniform(64, 128)
-            size2 = RNG.uniform(64, 128)
+            size1 = RNG.uniform(64, 256)
+            size2 = RNG.uniform(64, 256)
 
-        new_ind1.append(max(32, min(256, size1)))
-        new_ind2.append(max(32, min(256, size2)))
+        new_ind1.append(max(32, min(512, size1)))
+        new_ind2.append(max(32, min(512, size2)))
 
     # Blend other parameters
     alpha = RNG.uniform(0.3, 0.7)
@@ -277,17 +293,20 @@ def crossover_with_depth(ind1, ind2):
 
 
 def evaluate_model_with_depth(individual):
-    """Improved evaluation with more training and better metrics."""
+    """Improved evaluation with depth-adaptive training and better debugging."""
     try:
         # Parse individual
         num_layers = int(individual[0])
         layer_sizes = [
-            max(32, min(256, round(individual[i])))
+            max(32, min(512, round(individual[i])))
             for i in range(1, num_layers + 1)
         ]
-        beta = max(0.7, min(0.95, float(individual[num_layers + 1])))
-        lr = max(0.001, min(0.005, float(individual[num_layers + 2])))
-        dropout = max(0.0, min(0.2, float(individual[num_layers + 3])))
+        beta = max(0.5, min(0.9, float(individual[num_layers + 1])))
+        lr = max(0.0005, min(0.01, float(individual[num_layers + 2])))
+        dropout = max(0.0, min(0.3, float(individual[num_layers + 3])))
+
+        # Debug: Print individual parameters
+        console.print(f"Training: Layers={layer_sizes}, Beta={beta:.3f}, LR={lr:.4f}, Dropout={dropout:.3f}")
 
         model = create_snn(layer_sizes, beta, dropout)
         model.to(DEVICE)
@@ -298,6 +317,9 @@ def evaluate_model_with_depth(individual):
         )
         loss_fn = nn.CrossEntropyLoss()
 
+        # Depth-adaptive training - deeper networks get more training
+        max_batches = min(300, 100 + num_layers * 25)
+        
         # Extended training loop
         model.train()
         total_loss = 0
@@ -310,17 +332,20 @@ def evaluate_model_with_depth(individual):
             loss = loss_fn(output, targets)
             loss.backward()
 
-            # Gradient clipping to prevent exploding gradients
-            # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            # Depth-adaptive gradient clipping
+            if num_layers > 4:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
+            elif num_layers > 2:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.8)
+            else:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 
             optimizer.step()
             total_loss += loss.item()
             num_batches += 1
 
-            # Train on more batches based on network depth
-            # max_batches = min(50, 30 + num_layers * 5)
-            # if batch_idx >= max_batches:
-            #     break
+            if batch_idx >= max_batches:
+                break
 
         # More comprehensive evaluation
         model.eval()
@@ -339,21 +364,26 @@ def evaluate_model_with_depth(individual):
                 correct += (pred == targets).sum().item()
 
                 # Evaluate on more samples for better accuracy
-                if total >= 2000:  # Increased from 1000
+                if total >= 3000:  # Increased from 2000
                     break
 
         accuracy = correct / total
-        # avg_train_loss = total_loss / num_batches
-        # avg_eval_loss = eval_loss / min(batch_idx + 1, len(test_loader))
+        avg_train_loss = total_loss / num_batches
+        avg_eval_loss = eval_loss / (batch_idx + 1)
 
-        # Penalize overfitting and complexity
-        # num_layers * 0.001 + sum(layer_sizes) * 0.00001
-        # max(0, avg_train_loss - avg_eval_loss) * 0.1
-        #
+        # Debug: Print training details
+        console.print(f"Training Loss: {avg_train_loss:.4f}, Eval Loss: {avg_eval_loss:.4f}")
+        console.print(f"Correct: {correct}/{total} = {accuracy:.4f}")
+
+        # Small complexity penalty to encourage efficient architectures
+        complexity_penalty = (num_layers * 0.001 + sum(layer_sizes) * 0.000005)
         final_fitness = accuracy
-        console.print(f"Evaluating individual: {final_fitness}")
+
+        console.print(f"Final Fitness: {final_fitness:.6f} (Accuracy: {accuracy:.4f}, Penalty: {complexity_penalty:.6f})")
         return (final_fitness,)
 
-    except Exception:
-        console.print(f"Evaluating individual --> ERROR: {-1.0}")
+    except Exception as e:
+        console.print(f"Evaluation ERROR: {str(e)}")
+
         return (-1.0,)
+
