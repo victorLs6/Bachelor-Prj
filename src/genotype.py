@@ -184,7 +184,7 @@ def bounded_mutation_with_depth(individual, mu=0, sigma=0.15, indpb=0.2):
     # Mutate number of layers (increased probability)
     if RNG.random() < 0.3:  # Increased from 0.15
         # Allow both adding and removing layers
-        change = RNG.choice([-1, 0, 1])  # Can remove, stay same, or add
+        change = 1 if RNG.random() < 0.75 else -1 # Can remove, stay same, or add
         new_num_layers = max(1, min(8, num_layers + change))
 
         if new_num_layers > num_layers:
@@ -318,7 +318,7 @@ def evaluate_model_with_depth(individual):
         loss_fn = nn.CrossEntropyLoss()
 
         # Depth-adaptive training - deeper networks get more training
-        max_batches = min(300, 100 + num_layers * 25)
+        max_batches = min(500, 150 + num_layers * 50)
         
         # Extended training loop
         model.train()

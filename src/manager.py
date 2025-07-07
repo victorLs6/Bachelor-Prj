@@ -89,8 +89,8 @@ toolbox.register("select", tools.selTournament, tournsize=POP_SIZE // 4)
 
 def run_evolution():
     pop_size = POP_SIZE
-    pop = toolbox.population(n=pop_size)
-    hof = tools.HallOfFame(pop_size / 10)
+    pop = toolbox.population(POP_SIZE)
+    hof = tools.HallOfFame(POP_SIZE // 4)
 
     stats = tools.Statistics(lambda ind: ind.fitness.values)
     stats.register("avg", np.mean)
