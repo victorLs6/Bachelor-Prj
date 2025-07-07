@@ -182,13 +182,13 @@ Temporary Items
 .apdisk
 ### IMAGES #####################################################################
 # JPEG
-*.jpg
-*.JPG
-*.jpeg
-*.jpe
-*.jif
-*.jfif
-*.jfi
+# *.jpg
+# *.JPG
+# *.jpeg
+# *.jpe
+# *.jif
+# *.jfif
+# *.jfi
 # JPEG 2000
 *.jp2
 *.j2k
@@ -207,7 +207,7 @@ Temporary Items
 # Web P
 *.webp
 # Portable Network Graphics
-*.png
+# *.png
 # Animated Portable Network Graphics
 *.apng
 # Multiple-image Network Graphics
