@@ -370,7 +370,7 @@ def evaluate_model_with_depth(individual):
         accuracy = correct / total
         avg_train_loss = total_loss / num_batches
         avg_eval_loss = eval_loss / (batch_idx + 1)
-
+        #commit
         # Debug: Print training details
         console.print(f"Training Loss: {avg_train_loss:.4f}, Eval Loss: {avg_eval_loss:.4f}")
         console.print(f"Correct: {correct}/{total} = {accuracy:.4f}")
