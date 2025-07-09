@@ -22,13 +22,16 @@ Todo
 import operator
 from pathlib import Path
 
+
 # Third-party libraries
+import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 from matplotlib.patches import Rectangle
 from rich.console import Console
 from rich.traceback import install
+
 
 # Global constants
 SEED = 42
@@ -39,6 +42,8 @@ console = Console(width=180)
 RNG = np.random.default_rng(SEED)
 plt.style.use("seaborn-v0_8")
 sns.set_palette("husl")
+backprop_df = pd.read_csv("src/notebooks/accuracy_log.csv")
+backprop_accuracies = backprop_df["accuracy"].tolist()
 
 # Warning Control
 # Type Checking
@@ -612,7 +617,7 @@ def create_comprehensive_summary_plot(logbook, generation_best) -> None:
         max_fitness,
         "r-",
         linewidth=3,
-        label="Population Max",
+        label="Best Individual",
         marker="o",
         markersize=6,
     )
@@ -625,11 +630,11 @@ def create_comprehensive_summary_plot(logbook, generation_best) -> None:
         alpha=0.7,
     )
     ax_main.plot(
-        gen_data,
-        fitness_data,
+        generations,
+        backprop_accuracies[:len(generations)],
         "g-",
         linewidth=3,
-        label="Best Individual",
+        label="PyTorch",
         marker="*",
         markersize=10,
     )
